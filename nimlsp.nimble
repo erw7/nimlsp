@@ -12,7 +12,7 @@ bin           = @["nimlsp"]
 requires "nim >= 0.19.0"
 #requires "packedjson"
 requires "astpatternmatching"
-requires "jsonschema"
+requires "jsonschema >= 0.2.0"
 
 # nimble test does not work for me out of the box
 task test, "Runs the test suite":
