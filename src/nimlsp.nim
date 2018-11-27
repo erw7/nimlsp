@@ -305,22 +305,6 @@ while true:
         #        rawChar = signRequest["position"]["character"].getInt
         #        suggestions = getNimsuggest(fileuri).con(fileuri[7..^1], dirtyfile = filestash, rawLine + 1, rawChar)
 
-        else:
-          debugEcho "Unknown request"
-      continue
-    whenValid(message, NotificationMessage):
-      debugEcho "Got valid Notification message of type " & message["method"].getStr
-      if not initialized and message["method"].getStr != "exit":
-        continue
-      case message["method"].getStr:
-        of "exit":
-          debugEcho "Exiting"
-          if gotShutdown:
-            quit 0
-          else:
-            quit 1
-        of "initialized":
-          debugEcho "Properly initialized"
         of "textDocument/didOpen":
           message.textDocumentNotification(DidOpenTextDocumentParams, textDoc):
             let
