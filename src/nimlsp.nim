@@ -8,7 +8,7 @@ import ospaths
 import hashes
 
 const
-  storage = "/tmp/nimlsp"
+  storage = ospaths.getEnv("tmp", "/tmp/nimlsp")
   version = block:
     var version = "0.0.0"
     let nimbleFile = staticRead(currentSourcePath().parentDir().parentDir() / "nimlsp.nimble")
