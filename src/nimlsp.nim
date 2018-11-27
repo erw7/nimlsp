@@ -8,7 +8,7 @@ import ospaths
 import hashes
 include nimlsppkg / mappings
 
-const storage = "/tmp/nimlsp"
+const storage = ospaths.getEnv("tmp", "/tmp/nimlsp")
 
 discard existsOrCreateDir(storage)
 
