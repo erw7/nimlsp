@@ -6,6 +6,8 @@ import strutils
 import os
 import ospaths
 import hashes
+import uri
+import re
 
 const
   storage = ospaths.getEnv("tmp", "/tmp/nimlsp")
@@ -63,7 +65,7 @@ template textDocumentRequest(message, kind, name, body) {.dirty.} =
     whenValid(name, kind):
       let
         fileuri = name["textDocument"]["uri"].getStr
-        filestash = storage / (hash(fileuri).toHex & ".nim" )
+        filestash = (storage / (hash(fileuri).toHex & ".nim" )).replace("\\", "/")
       debugEcho "Got request for URI: ", fileuri, " copied to " & filestash
       let
         rawLine = name["position"]["line"].getInt
@@ -77,7 +79,7 @@ template textDocumentNotification(message, kind, name, body) {.dirty.} =
       if not name["textDocument"].hasKey("languageId") or name["textDocument"]["languageId"].getStr == "nim":
         let
           fileuri = name["textDocument"]["uri"].getStr
-          filestash = storage / (hash(fileuri).toHex & ".nim" )
+          filestash = (storage / (hash(fileuri).toHex & ".nim" )).replace("\\", "/")
         body
 
 proc respond(request: RequestMessage, data: JsonNode) =
@@ -138,6 +140,13 @@ if not existsFile(nimpath / "config/nim.cfg"):
     "Supply the Nim project folder by adding it as an argument.\n"
   quit 1
 
+proc uriToPath(uri: string): string =
+  var path = decodeUrl(uri)
+  path = path.replace(re"^file://")
+  when defined windows:
+    path = path.replace(re"^/")
+  return path
+
 while true:
   try:
     debugEcho "Trying to read frame"
@@ -195,7 +204,7 @@ while true:
           )).JsonNode)
         of "textDocument/completion":
           message.textDocumentRequest(CompletionParams, compRequest):
-            let suggestions = getNimsuggest(fileuri).sug(fileuri[7..^1], dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).sug(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
@@ -224,7 +233,7 @@ while true:
             message.respond completionItems
         of "textDocument/hover":
           message.textDocumentRequest(TextDocumentPositionParams, hoverRequest):
-            let suggestions = getNimsuggest(fileuri).def(fileuri[7..^1], dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
@@ -256,7 +265,7 @@ while true:
                 message.respond create(Hover, markedString, rangeopt).JsonNode
         of "textDocument/references":
           message.textDocumentRequest(ReferenceParams, referenceRequest):
-            let suggestions = getNimsuggest(fileuri).use(fileuri[7..^1], dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).use(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
@@ -279,7 +288,7 @@ while true:
               message.respond response
         of "textDocument/rename":
           message.textDocumentRequest(RenameParams, renameRequest):
-            let suggestions = getNimsuggest(fileuri).use(fileuri[7..^1], dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).use(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
@@ -306,7 +315,7 @@ while true:
               ).JsonNode
         of "textDocument/definition":
           message.textDocumentRequest(TextDocumentPositionParams, definitionRequest):
-            let declarations = getNimsuggest(fileuri).def(fileuri[7..^1], dirtyfile = filestash,
+            let declarations = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
@@ -344,7 +353,7 @@ while true:
           message.textDocumentNotification(DidOpenTextDocumentParams, textDoc):
             let
               file = open(filestash, fmWrite)
-              projectFile = getProjectFile(fileuri[7..^1])
+              projectFile = getProjectFile(uriToPath(fileuri)).replace("\\", "/")
             debugEcho "New document opened for URI: ", fileuri, " saving to " & filestash
             openFiles[fileuri] = (
               #nimsuggest: initNimsuggest(fileuri[7..^1]),
@@ -370,7 +379,7 @@ while true:
             file.close()
         of "textDocument/didClose":
           message.textDocumentNotification(DidCloseTextDocumentParams, textDoc):
-            let projectFile = getProjectFile(fileuri[7..^1])
+            let projectFile = getProjectFile(uriToPath(fileuri).replace("\\", "/"))
             debugEcho "Got document close for URI: ", fileuri, " copied to " & filestash
             removeFile(filestash)
             projectFiles[projectFile].openFiles -= 1
@@ -389,7 +398,7 @@ while true:
                 file.writeLine line
               file.close()
             debugEcho "fileuri: ", fileuri, ", project file: ", openFiles[fileuri].projectFile, ", dirtyfile: ", filestash
-            let diagnostics = getNimsuggest(fileuri).chk(fileuri[7..^1], dirtyfile = filestash)
+            let diagnostics = getNimsuggest(fileuri).chk(uriToPath(fileuri), dirtyfile = filestash)
             debugEcho "Found suggestions: ",
               diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
               (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
