@@ -282,10 +282,6 @@ while true:
               message.respond response
         of "textDocument/definition":
           message.textDocumentRequest(TextDocumentPositionParams, definitionRequest):
-            let suggestions = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
-              rawLine + 1,
-              openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
-            )
             let declarations = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
