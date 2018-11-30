@@ -3,6 +3,7 @@ import os
 import strutils
 import streams
 import re
+import debugecho
 
 type
   Suggestion* = object
@@ -45,7 +46,7 @@ proc stopNimSuggest*(nimsuggest: NimSuggest): int =
     nimsuggest.close()
   else: result = -1
 
-template createCommand(command, body: untyped): untyped =
+template createCommand(command, debugecho, body: untyped): untyped =
   if not nimsuggest.running:
     raise newException(IOError, "nimsuggest process is not running")
   body
@@ -53,23 +54,29 @@ template createCommand(command, body: untyped): untyped =
   var line = ""
   while true:
     line = nimsuggest.outputStream.readLine().replace(re("^>\\s*"), "")
+    debugecho.debugEcho "read from nimsuggest ", line
     if line.startsWith(command.astToStr):
       result.add line.parseSuggestion
+      debugecho.debugEcho result[result.high]
     if line.len == 0:
       break
 
 template createFullCommand(command: untyped) {.dirty.} =
   proc command*(nimsuggest: NimSuggest, file: string, dirtyfile = "",
             line: int, col: int): seq[Suggestion] =
-    createCommand(command):
-      nimsuggest.inputStream.writeLine("$1 \"$2\"$3:$4:$5" %
-        [command.astToStr, file, (if dirtyfile.len > 0: ";\"$1\"" % [dirtyfile] else: ""), $line, $col])
+    createCommand(command, debugecho):
+      var args = "$1 \"$2\"$3:$4:$5" %
+        [command.astToStr, file, (if dirtyfile.len > 0: ";\"$1\"" % [dirtyfile] else: ""), $line, $col]
+      debugecho.debugEcho "call nimsuggest args: ", args
+      nimsuggest.inputStream.writeLine(args)
 
 template createFileOnlyCommand(command: untyped) {.dirty.} =
   proc command*(nimsuggest: NimSuggest, file: string, dirtyfile = ""): seq[Suggestion] =
-    createCommand(command):
-      nimsuggest.inputStream.writeLine("$1 \"$2\"$3" %
-        [command.astToStr, file, (if dirtyfile.len > 0: ";\"$1\"" % [dirtyfile] else: "")])
+    createCommand(command, debugecho):
+      var args = "$1 \"$2\"$3" %
+              [command.astToStr, file, (if dirtyfile.len > 0: ";\"$1\"" % [dirtyfile] else: "")]
+      debugecho.debugEcho "call nimsuggest args: ", args
+      nimsuggest.inputStream.writeLine(args)
 
 createFullCommand(sug)
 createFullCommand(con)
