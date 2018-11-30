@@ -2,6 +2,7 @@ import osproc
 import os
 import strutils
 import streams
+import re
 
 type
   Suggestion* = object
@@ -50,10 +51,12 @@ template createCommand(command, body: untyped): untyped =
   body
   nimsuggest.inputStream.flush()
   var line = ""
-  while line.len != 0 or result.len == 0:
-    line = nimsuggest.outputStream.readLine
+  while true:
+    line = nimsuggest.outputStream.readLine().replace(re("^>\\s*"), "")
     if line.startsWith(command.astToStr):
       result.add line.parseSuggestion
+    if line.len == 0:
+      break
 
 template createFullCommand(command: untyped) {.dirty.} =
   proc command*(nimsuggest: NimSuggest, file: string, dirtyfile = "",
