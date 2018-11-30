@@ -1,4 +1,4 @@
-import nimlsppkg / [base_protocol, utfmapping, nimsuggest]
+import nimlsppkg / [base_protocol, utfmapping, nimsuggest, debugecho]
 include nimlsppkg / messages2
 import streams
 import tables
@@ -14,21 +14,11 @@ const storage = ospaths.getEnv("tmp", "/tmp/nimlsp")
 
 discard existsOrCreateDir(storage)
 
-when defined(debugLogging):
-  var logFile = open(storage / "nimlsp.log", fmWrite)
-
-template debugEcho(args: varargs[string, `$`]) =
-  when defined(debugLogging):
-    stderr.write(join args)
-    stderr.write("\n")
-    logFile.write(join args)
-    logFile.write("\n\n")
-    logFile.flushFile()
 # Hello Nim!
-debugEcho "Started nimlsp with ENV:"
+debugecho.debugEcho "Started nimlsp with ENV:"
 for ev in envPairs():
-  debugEcho ev.key & ": " & ev.value
-debugEcho "------------------------"
+  debugecho.debugEcho ev.key & ": " & ev.value
+debugecho.debugEcho "------------------------"
 
 var
   ins = newFileStream(stdin)
@@ -57,7 +47,7 @@ template textDocumentRequest(message, kind, name, body) {.dirty.} =
       let
         fileuri = name["textDocument"]["uri"].getStr
         filestash = (storage / (hash(fileuri).toHex & ".nim" )).replace("\\", "/")
-      debugEcho "Got request for URI: ", fileuri, " copied to " & filestash
+      debugecho.debugEcho "Got request for URI: ", fileuri, " copied to " & filestash
       let
         rawLine = name["position"]["line"].getInt
         rawChar = name["position"]["character"].getInt
@@ -129,22 +119,22 @@ proc pathToUri(path: string): string =
 
 while true:
   try:
-    debugEcho "Trying to read frame"
+    debugecho.debugEcho "Trying to read frame"
     let frame = ins.readFrame
-    debugEcho "Got frame:\n" & frame
+    debugecho.debugEcho "Got frame:\n" & frame
     let message = frame.parseJson
     whenValid(message, RequestMessage):
-      debugEcho "Got valid Request message of type " & message["method"].getStr
+      debugecho.debugEcho "Got valid Request message of type " & message["method"].getStr
       if not initialized and message["method"].getStr != "initialize":
         message.error(-32002, "Unable to accept requests before being initialized", newJNull())
         continue
       case message["method"].getStr:
         of "shutdown":
-          debugEcho "Got shutdown request, answering"
+          debugecho.debugEcho "Got shutdown request, answering"
           message.respond(newJNull())
           gotShutdown = true
         of "initialize":
-          debugEcho "Got initialize request, answering"
+          debugecho.debugEcho "Got initialize request, answering"
           initialized = true
           message.respond(create(InitializeResult, create(ServerCapabilities,
             textDocumentSync = some(create(TextDocumentSyncOptions,
@@ -188,7 +178,7 @@ while true:
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugEcho "Found suggestions: ",
+            debugecho.debugEcho "Found suggestions: ",
               suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
               (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             var completionItems = newJarray()
@@ -217,7 +207,7 @@ while true:
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugEcho "Found suggestions: ",
+            debugecho.debugEcho "Found suggestions: ",
               suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
               (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             if suggestions.len == 0:
@@ -256,7 +246,7 @@ while true:
                   openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
                 )
               else: @[]
-            debugEcho "Found suggestions: ",
+            debugecho.debugEcho "Found suggestions: ",
               suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
               (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             if suggestions.len == 0 and declarations.len == 0:
@@ -286,7 +276,7 @@ while true:
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugEcho "Found suggestions: ",
+            debugecho.debugEcho "Found suggestions: ",
               declarations[0..(if declarations.len > 10: 10 else: declarations.high)],
               (if declarations.len > 10: " and " & $(declarations.len-10) & " more" else: "")
             if declarations.len == 0:
@@ -310,7 +300,7 @@ while true:
         #      let
         #        fileuri = signRequest["textDocument"]["uri"].getStr
         #        filestash = storage / (hash(fileuri).toHex & ".nim" )
-        #      debugEcho "Got signature request for URI: ", fileuri, " copied to " & filestash
+        #      debugecho.debugEcho "Got signature request for URI: ", fileuri, " copied to " & filestash
         #      let
         #        rawLine = signRequest["position"]["line"].getInt
         #        rawChar = signRequest["position"]["character"].getInt
@@ -321,7 +311,7 @@ while true:
             let
               file = open(filestash, fmWrite)
               projectFile = getProjectFile(uriToPath(fileuri)).replace("\\", "/")
-            debugEcho "New document opened for URI: ", fileuri, " saving to " & filestash
+            debugecho.debugEcho "New document opened for URI: ", fileuri, " saving to " & filestash
             openFiles[fileuri] = (
               #nimsuggest: startNimsuggest(fileuri[7..^1]),
               projectFile: projectFile,
@@ -338,7 +328,7 @@ while true:
         of "textDocument/didChange":
           message.textDocumentNotification(DidChangeTextDocumentParams, textDoc):
             let file = open(filestash, fmWrite)
-            debugEcho "Got document change for URI: ", fileuri, " saving to " & filestash
+            debugecho.debugEcho "Got document change for URI: ", fileuri, " saving to " & filestash
             openFiles[fileuri].fingerTable = @[]
             for line in textDoc["contentChanges"][0]["text"].getStr.splitLines:
               openFiles[fileuri].fingerTable.add line.createUTFMapping()
@@ -347,26 +337,26 @@ while true:
         of "textDocument/didClose":
           message.textDocumentNotification(DidCloseTextDocumentParams, textDoc):
             let projectFile = getProjectFile(uriToPath(fileuri).replace("\\", "/"))
-            debugEcho "Got document close for URI: ", fileuri, " copied to " & filestash
+            debugecho.debugEcho "Got document close for URI: ", fileuri, " copied to " & filestash
             removeFile(filestash)
             projectFiles[projectFile].openFiles -= 1
             if projectFiles[projectFile].openFiles == 0:
-              debugEcho "Trying to stop nimsuggest"
-              debugEcho "Stopped nimsuggest with code: " & $getNimsuggest(fileuri).stopNimsuggest()
+              debugecho.debugEcho "Trying to stop nimsuggest"
+              debugecho.debugEcho "Stopped nimsuggest with code: " & $getNimsuggest(fileuri).stopNimsuggest()
             openFiles.del(fileuri)
         of "textDocument/didSave":
           message.textDocumentNotification(DidSaveTextDocumentParams, textDoc):
             if textDoc["text"].isSome:
               let file = open(filestash, fmWrite)
-              debugEcho "Got document change for URI: ", fileuri, " saving to ", filestash
+              debugecho.debugEcho "Got document change for URI: ", fileuri, " saving to ", filestash
               openFiles[fileuri].fingerTable = @[]
               for line in textDoc["text"].unsafeGet.getStr.splitLines:
                 openFiles[fileuri].fingerTable.add line.createUTFMapping()
                 file.writeLine line
               file.close()
-            debugEcho "fileuri: ", fileuri, ", project file: ", openFiles[fileuri].projectFile, ", dirtyfile: ", filestash
+            debugecho.debugEcho "fileuri: ", fileuri, ", project file: ", openFiles[fileuri].projectFile, ", dirtyfile: ", filestash
             let diagnostics = getNimsuggest(fileuri).chk(uriToPath(fileuri), dirtyfile = filestash)
-            debugEcho "Found suggestions: ",
+            debugecho.debugEcho "Found suggestions: ",
               diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
               (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
             if diagnostics.len == 0:
@@ -403,7 +393,16 @@ while true:
                 response).JsonNode
               )
         else:
-          debugEcho "Got unknown notification message"
+          debugecho.debugEcho "Got unknown notification message"
       continue
   except IOError:
+    let
+      e = getCurrentException()
+      msg = getCurrentExceptionMsg()
+    debugecho.debugEcho "Got exception", repr(e), " with message ", msg
     break
+  except:
+    let
+      e = getCurrentException()
+      msg = getCurrentExceptionMsg()
+    debugecho.debugEcho "Got exception", repr(e), " with message ", msg
