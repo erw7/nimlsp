@@ -141,11 +141,10 @@ if not existsFile(nimpath / "config/nim.cfg"):
   quit 1
 
 proc uriToPath(uri: string): string =
-  var path = decodeUrl(uri)
-  path = path.replace(re"^file://")
+  result = decodeUrl(uri).replace(re"^file://")
   when defined windows:
-    path = path.replace(re"^/")
-  return path
+    result = result.replace(re"^/")
+
 
 while true:
   try:
