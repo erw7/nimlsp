@@ -35,7 +35,7 @@ proc parseSuggestion(sugstring: string): Suggestion =
 
 proc startNimSuggest*(projectfile: string): NimSuggest =
   result = startProcess("nimsuggest", args = ["--v2", "--stdin", projectfile],
-                        options = {poUsePath, poEchoCmd})
+                        options = {poUsePath})
 
 proc stopNimSuggest*(nimsuggest: NimSuggest): int =
   if nimsuggest.running:
