@@ -145,6 +145,13 @@ proc uriToPath(uri: string): string =
   when defined windows:
     result = result.replace(re"^/")
 
+proc pathToUri(path: string): string =
+  let reSlash = re("%2f", flags = {reIgnoreCase})
+  result = "file://"
+  when defined windows:
+    result = result & "/" & encodeUrl(path.replace("\\", "/")).replace(reSlash, "/")
+  else:
+    result = result & encodeUrl(path).replace(reSlash, "/")
 
 while true:
   try:
@@ -275,7 +282,7 @@ while true:
             for suggestion in suggestions:
               if suggestion.section == ideUse or referenceRequest["context"]["includeDeclaration"].getBool:
                 response.add create(Location,
-                  "file://" & suggestion.filepath,
+                  pathToUri(suggestion.filepath),
                   create(Range,
                     create(Position, suggestion.line-1, suggestion.column),
                     create(Position, suggestion.line-1, suggestion.column + suggestion.qualifiedPath[^1].len)
@@ -327,7 +334,7 @@ while true:
               var response = newJarray()
               for declaration in declarations:
                 response.add create(Location,
-                  "file://" & declaration.filepath,
+                  pathToUri(declaration.filepath),
                   create(Range,
                     create(Position, declaration.line-1, declaration.column),
                     create(Position, declaration.line-1, declaration.column + declaration.qualifiedPath[^1].len)
