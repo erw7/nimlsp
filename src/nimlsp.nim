@@ -1,4 +1,7 @@
-import nimlsppkg / [base_protocol, utfmapping, nimsuggest, debugecho]
+import nim / compiler / prefixmatches
+import nim / nimsuggest / nimsuggest
+from nim / compiler / ast import TSymKind
+import nimlsppkg / [base_protocol, utfmapping, debugecho]
 include nimlsppkg / messages2
 import streams
 import tables
@@ -174,17 +177,17 @@ while true:
           )).JsonNode)
         of "textDocument/completion":
           message.textDocumentRequest(CompletionParams, compRequest):
-            let suggestions = getNimsuggest(fileuri).sug(uriToPath(fileuri), dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).runCmd(ideSug, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugecho.debugEcho "Found suggestions: ",
-              suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
-              (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
+            # debugecho.debugEcho "Found suggestions: ",
+              # suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
+              # (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             var completionItems = newJarray()
             for suggestion in suggestions:
               completionItems.add create(CompletionItem,
-                label = suggestion.qualifiedPath.split('.')[^1],
+                label = suggestion.qualifiedPath[0].split('.')[^1],
                 kind = some(nimSymToLSPKind(suggestion).int),
                 detail = some(nimSymDetails(suggestion)),
                 documentation = some(suggestion.nimDocstring),
@@ -203,19 +206,19 @@ while true:
             message.respond completionItems
         of "textDocument/hover":
           message.textDocumentRequest(TextDocumentPositionParams, hoverRequest):
-            let suggestions = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).runCmd(ideDef, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugecho.debugEcho "Found suggestions: ",
-              suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
-              (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
+            # debugecho.debugEcho "Found suggestions: ",
+            #   suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
+            #   (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             if suggestions.len == 0:
               message.respond newJNull()
             else:
-              var label = suggestions[0].qualifiedPath
-              if suggestions[0].signature != "":
-                label &= ": " & suggestions[0].signature
+              var label = suggestions[0].qualifiedPath[0]
+              if cast[string](suggestions[0].name)!= "":
+                label &= ": " & cast[string](suggestions[0].name)
               let
                 rangeopt =
                   some(create(Range,
@@ -223,7 +226,7 @@ while true:
                     create(Position, rawLine, rawChar)
                   ))
                 markedString = create(MarkedStringOption, "nim", label)
-              if suggestions[0].docstring != "\"\"":
+              if suggestions[0].doc != "\"\"":
                 message.respond create(Hover,
                   @[
                     markedString,
@@ -235,20 +238,20 @@ while true:
                 message.respond create(Hover, markedString, rangeopt).JsonNode
         of "textDocument/references":
           message.textDocumentRequest(ReferenceParams, referenceRequest):
-            let suggestions = getNimsuggest(fileuri).use(uriToPath(fileuri), dirtyfile = filestash,
+            let suggestions = getNimsuggest(fileuri).runCmd(ideUse, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            let declarations: seq[Suggestion] =
+            let declarations: seq[Suggest] =
               if referenceRequest["context"]["includeDeclaration"].getBool:
-                getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
+                getNimsuggest(fileuri).runCmd(ideDef, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile,
                   rawLine + 1,
                   openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
                 )
               else: @[]
-            debugecho.debugEcho "Found suggestions: ",
-              suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
-              (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
+            # debugecho.debugEcho "Found suggestions: ",
+            #   suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
+            #   (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             if suggestions.len == 0 and declarations.len == 0:
               message.respond newJNull()
             else:
@@ -272,13 +275,13 @@ while true:
               message.respond response
         of "textDocument/definition":
           message.textDocumentRequest(TextDocumentPositionParams, definitionRequest):
-            let declarations = getNimsuggest(fileuri).def(uriToPath(fileuri), dirtyfile = filestash,
+            let declarations = getNimsuggest(fileuri).runCmd(ideDef, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile,
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            debugecho.debugEcho "Found suggestions: ",
-              declarations[0..(if declarations.len > 10: 10 else: declarations.high)],
-              (if declarations.len > 10: " and " & $(declarations.len-10) & " more" else: "")
+            # debugecho.debugEcho "Found suggestions: ",
+            #   declarations[0..(if declarations.len > 10: 10 else: declarations.high)],
+            #   (if declarations.len > 10: " and " & $(declarations.len-10) & " more" else: "")
             if declarations.len == 0:
               message.respond newJNull()
             else:
@@ -318,7 +321,7 @@ while true:
               fingerTable: @[]
             )
             if not projectFiles.hasKey(projectFile):
-              projectFiles[projectFile] = (nimsuggest: startNimsuggest(projectFile), openFiles: 1)
+              projectFiles[projectFile] = (nimsuggest: initNimSuggest(projectFile), openFiles: 1)
             else:
               projectFiles[projectFile].openFiles += 1
             for line in textDoc["textDocument"]["text"].getStr.splitLines:
@@ -342,8 +345,6 @@ while true:
             projectFiles[projectFile].openFiles -= 1
             if projectFiles[projectFile].openFiles == 0:
               debugecho.debugEcho "Trying to stop nimsuggest"
-              debugecho.debugEcho "Stopped nimsuggest with code: " & $getNimsuggest(fileuri).stopNimsuggest()
-            openFiles.del(fileuri)
         of "textDocument/didSave":
           message.textDocumentNotification(DidSaveTextDocumentParams, textDoc):
             if textDoc["text"].isSome:
@@ -355,10 +356,10 @@ while true:
                 file.writeLine line
               file.close()
             debugecho.debugEcho "fileuri: ", fileuri, ", project file: ", openFiles[fileuri].projectFile, ", dirtyfile: ", filestash
-            let diagnostics = getNimsuggest(fileuri).chk(uriToPath(fileuri), dirtyfile = filestash)
-            debugecho.debugEcho "Found suggestions: ",
-              diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
-              (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
+            let diagnostics = getNimsuggest(fileuri).runCmd(ideChk, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile, 0, 0)
+            # debugecho.debugEcho "Found suggestions: ",
+            #   diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
+            #   (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
             if diagnostics.len == 0:
               notify("textDocument/publishDiagnostics", create(PublishDiagnosticsParams,
                 fileuri,
@@ -378,7 +379,7 @@ while true:
                     create(Position, diagnostic.line-1, diagnostic.column),
                     create(Position, diagnostic.line-1, max(diagnostic.column, endcolumn))
                   ),
-                  some(case diagnostic.qualifiedPath:
+                  some(case diagnostic.qualifiedPath[0]:
                     of "Error": DiagnosticSeverity.Error.int
                     of "Hint": DiagnosticSeverity.Hint.int
                     of "Warning": DiagnosticSeverity.Warning.int

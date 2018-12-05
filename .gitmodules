@@ -1,0 +1,3 @@
+[submodule "src/nim"]
+	path = src/nim
+	url = https://github.com/nim-lang/Nim
