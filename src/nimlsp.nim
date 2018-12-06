@@ -1,6 +1,6 @@
-import nim / compiler / prefixmatches
-import nim / nimsuggest / nimsuggest
-from nim / compiler / ast import TSymKind
+import nimsuggest / nimsuggest
+from compiler / sigmatch import `$`
+from compiler / ast import TSymKind
 import nimlsppkg / [base_protocol, utfmapping, debugecho]
 include nimlsppkg / messages2
 import streams
@@ -181,16 +181,16 @@ while true:
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            # debugecho.debugEcho "Found suggestions: ",
-              # suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
-              # (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
+            debugecho.debugEcho "Found suggestions: ",
+              suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
+              (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             var completionItems = newJarray()
             for suggestion in suggestions:
               completionItems.add create(CompletionItem,
-                label = suggestion.qualifiedPath[0].split('.')[^1],
+                label = suggestion.qualifiedPath[^1],
                 kind = some(nimSymToLSPKind(suggestion).int),
                 detail = some(nimSymDetails(suggestion)),
-                documentation = some(suggestion.nimDocstring),
+                documentation = some(suggestion.doc),
                 deprecated = none(bool),
                 preselect = none(bool),
                 sortText = none(string),
@@ -249,9 +249,9 @@ while true:
                   openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
                 )
               else: @[]
-            # debugecho.debugEcho "Found suggestions: ",
-            #   suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
-            #   (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
+            debugecho.debugEcho "Found suggestions: ",
+              suggestions[0..(if suggestions.len > 10: 10 else: suggestions.high)],
+              (if suggestions.len > 10: " and " & $(suggestions.len-10) & " more" else: "")
             if suggestions.len == 0 and declarations.len == 0:
               message.respond newJNull()
             else:
@@ -279,9 +279,9 @@ while true:
               rawLine + 1,
               openFiles[fileuri].fingerTable[rawLine].utf16to8(rawChar)
             )
-            # debugecho.debugEcho "Found suggestions: ",
-            #   declarations[0..(if declarations.len > 10: 10 else: declarations.high)],
-            #   (if declarations.len > 10: " and " & $(declarations.len-10) & " more" else: "")
+            debugecho.debugEcho "Found suggestions: ",
+              declarations[0..(if declarations.len > 10: 10 else: declarations.high)],
+              (if declarations.len > 10: " and " & $(declarations.len-10) & " more" else: "")
             if declarations.len == 0:
               message.respond newJNull()
             else:
@@ -357,9 +357,9 @@ while true:
               file.close()
             debugecho.debugEcho "fileuri: ", fileuri, ", project file: ", openFiles[fileuri].projectFile, ", dirtyfile: ", filestash
             let diagnostics = getNimsuggest(fileuri).runCmd(ideChk, uriToPath(fileuri).AbsoluteFile, filestash.AbsoluteFile, 0, 0)
-            # debugecho.debugEcho "Found suggestions: ",
-            #   diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
-            #   (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
+            debugecho.debugEcho "Found suggestions: ",
+              diagnostics[0..(if diagnostics.len > 10: 10 else: diagnostics.high)],
+              (if diagnostics.len > 10: " and " & $(diagnostics.len-10) & " more" else: "")
             if diagnostics.len == 0:
               notify("textDocument/publishDiagnostics", create(PublishDiagnosticsParams,
                 fileuri,
@@ -379,7 +379,7 @@ while true:
                     create(Position, diagnostic.line-1, diagnostic.column),
                     create(Position, diagnostic.line-1, max(diagnostic.column, endcolumn))
                   ),
-                  some(case diagnostic.qualifiedPath[0]:
+                  some(case diagnostic.qualifiedPath.join("."):
                     of "Error": DiagnosticSeverity.Error.int
                     of "Hint": DiagnosticSeverity.Hint.int
                     of "Warning": DiagnosticSeverity.Warning.int
